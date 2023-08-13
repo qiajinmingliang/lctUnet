@@ -138,19 +138,25 @@ class Dense_residual_cat_block(nn.Module):
         return x_out#([3, 128, 4, 64, 64])
 #--------------------------------------------------------------attention conv--------------------------------------------------------#
 class LCTAttention(nn.Module):
-    def __init__(self, dim=512, kernel_size=3, res=True):
+    def __init__(self, dim=512, kernel_size=3, res=False):
         super().__init__()
+
         self.res = res
         self.dim = dim
         self.kernel_size = kernel_size
-        self.key_embed = nn.Sequential(
+        self.value_embed = nn.Sequential(
             nn.Conv3d(dim, dim, kernel_size=kernel_size, padding=kernel_size // 2, groups=4, bias=True),
             nn.BatchNorm3d(dim),
             nn.ReLU()
         )
-        self.value_embed = nn.Sequential(
+        self.query_embed = nn.Sequential(
             nn.Conv3d(dim, dim, 1, bias=True),
             nn.BatchNorm3d(dim)
+        )
+        self.key_embed = nn.Sequential(
+            nn.Conv3d(dim, dim, kernel_size=kernel_size, padding=kernel_size // 2, groups=4, bias=True),
+            nn.BatchNorm3d(dim),
+            nn.ReLU()
         )
         factor = 4
         self.attention_embed = nn.Sequential(
@@ -159,46 +165,23 @@ class LCTAttention(nn.Module):
             nn.ReLU(),
             nn.Conv3d(2 * dim // factor, kernel_size * kernel_size * dim, 1)
         )
-    def forward(self, x):
-        bs, c, h, w, d = x.shape
-        k1 = self.key_embed(x)  # bs,c,h,w
-        v = self.value_embed(x).view(bs, c, -1)  # bs,c,h,w
-        y = torch.cat([k1, x], dim=1)  # bs,2c,h,w
-        att = self.attention_embed(y)  # bs,c*k*k,h,w
+    def forward(self, x):#x(1,64,4,64,64)
+        bs, c, h, w, d = x.shape #bs1,c64,h4,w64,d64
+        k1 = self.query_embed(x) 
+        x1 = self.key_embed(x)
+        v = self.value_embed(x).view(bs, c, -1) 
+        qk = torch.matmul(k1, x1)
+        y = torch.cat([qk, x1], dim=1)  
+        # y = torch.cat([k1, x1], dim=1)  
+        att = self.attention_embed(y)  #att(1,576,4,64,64) 
         att = att.reshape(bs, c, self.kernel_size * self.kernel_size, h, w, d)
-        att = att.mean(2, keepdim=False).view(bs, c, -1)  # bs,c,h*w
+        att = att.mean(2, keepdim=False).view(bs, c, -1) #att(1,64,16384) 
         k2 = F.softmax(att, dim=-1) * v
         k2 = k2.view(bs, c, h, w, d)
-        out = k1 + k2
+        out = k1 + k2#out(1,64,4,64,64)
         if self.res:
             out = out + x
         return out
-class ECAAttention(nn.Module):
-    def __init__(self, kernel_size=3):
-        super().__init__()
-        self.gap = nn.AdaptiveAvgPool3d(1)
-        self.conv = nn.Conv1d(1,1,kernel_size=kernel_size,padding=(kernel_size-1)//2)
-        self.sigmoid = nn.Sigmoid()
-    def init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv3d):
-                init.kaiming_normal_(m.weight, mode='fan_out')
-                if m.bias is not None:
-                    init.constant_(m.bias, 0)
-            elif isinstance(m, nn.BatchNorm3d):
-                init.constant_(m.weight, 1)
-                init.constant_(m.bias, 0)
-            elif isinstance(m, nn.Linear):
-                init.normal_(m.weight, std=0.001)
-                if m.bias is not None:
-                    init.constant_(m.bias, 0)
-    def forward(self, x):
-        y = self.gap(x) #bs,c,1,1,1
-        y = y.squeeze(-1).squeeze(-1).permute(0, 2, 1) #bs,1,c
-        y = self.conv(y) #bs,1,c
-        y = self.sigmoid(y) #bs,1,c
-        y = y.permute(0, 2, 1).unsqueeze(-1).unsqueeze(-1) #bs,c,1,1,1
-        return x*y.expand_as(x)
 #--------------------------------------------------------------attention conv--------------------------------------------------------#
 
 class LCT_new_DR_UNet_new(nn.Module):
