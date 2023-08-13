@@ -1,2 +1,2 @@
-# Coronary-Artery-segmentation-with-LCTUnet
-The code will be released after the paper is published
+代码问题请联系:qianjinww@foxmail.com
+For code issues, please contact: qianjinww@foxmail.com
