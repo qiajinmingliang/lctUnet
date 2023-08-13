@@ -1,7 +1,7 @@
 import math
 import os
 import sys
-os.environ['CUDA_VISIBLE_DEVICES']='1'
+# os.environ['CUDA_VISIBLE_DEVICES']='1'
 
 from models.my_models.conv_block import *
 sys.path.append(os.path.split(sys.path[0])[0])
@@ -77,9 +77,68 @@ class MaxPooling(nn.Module):
         x1 = self.maxpooling(x)
         return x1
 #--------------------------------------------------------------basic conv--------------------------------------------------------#
+class Dense_residual_block(nn.Module):
+
+    def __init__(self, ch_in, ch_out):
+        super(Dense_residual_block, self).__init__()
+        self.conv1 = nn.Conv3d(ch_in, ch_out, kernel_size=1, padding=0)
+        self.conv3 = nn.Conv3d(ch_out, ch_out, kernel_size=3, padding=1)
+        self.conv5 = nn.Conv3d(ch_out , ch_out, kernel_size=5, padding=2)
+        self.bn1 = nn.BatchNorm3d(ch_out)
+        self.bn3 = nn.BatchNorm3d(ch_out)
+        self.bn4 = nn.BatchNorm3d(ch_out)
+        self.bn5 = nn.BatchNorm3d(ch_out)
+        self.bn6 = nn.BatchNorm3d(ch_out)
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):#([3, 128, 4, 64, 64])
+        x_out1 = self.conv1(x)#([3, 256, 4, 64, 64])
+        x_out1 = self.bn1(x_out1)
+        x_out1 = self.relu(x_out1)
+
+        x_out3 = self.conv3(x_out1)#([3, 256, 4, 64, 64])
+        # x_out3 = self.bn3(x_out3)
+
+        x_out5 = self.conv5(x_out3 + x)#([3, 256, 4, 64, 64])
+        # x_out5 = self.bn5(x_out5)
+
+        x_out = x_out1 + x_out3 + x_out5
+        x_out = self.relu(x_out)
+        return x_out
+
+class Dense_residual_cat_block(nn.Module):
+    def __init__(self, ch_in, ch_out):
+        super(Dense_residual_cat_block, self).__init__()
+        self.conv1 = nn.Conv3d(ch_in, ch_out, kernel_size=1, padding=0)
+        self.conv3 = nn.Conv3d(ch_out, ch_out, kernel_size=3, padding=1)
+        self.convm = nn.Conv3d(ch_in + ch_out, ch_out, kernel_size=3, stride=1, padding=1)
+        self.conv5 = nn.Conv3d(ch_out, ch_out, kernel_size=5, padding=2)
+        self.bn1 = nn.BatchNorm3d(ch_out)
+        self.bn3 = nn.BatchNorm3d(ch_out)
+        self.bn4 = nn.BatchNorm3d(ch_out)
+        self.bn5 = nn.BatchNorm3d(ch_out)
+        self.bn6 = nn.BatchNorm3d(ch_out)
+        self.relu = nn.ReLU(inplace=True)
+    def forward(self, x):#([3, 128+64, 4, 64, 64])
+        x_out1 = self.conv1(x)#([3, 128, 4, 64, 64])
+        x_out1 = self.bn1(x_out1)
+        x_out1 = self.relu(x_out1)
+
+        x_out3 = self.conv3(x_out1)#([3, 128, 4, 64, 64])
+        # x_out3 = self.bn3(x_out3)
+
+        x_out4 = self.convm(torch.cat([x_out3,x],dim=1))#([3, 128, 4, 64, 64])
+        # x_out4 = self.bn4(x_out4)
+
+        x_out5 = self.conv5(x_out4)#([3, 128, 4, 64, 64])
+        # x_out5 = self.bn5(x_out5)
+
+        x_out = x_out1 + x_out3 + x_out5#([3, 128, 4, 64, 64])
+        x_out = self.relu(x_out)
+        return x_out#([3, 128, 4, 64, 64])
 #--------------------------------------------------------------attention conv--------------------------------------------------------#
-class CoTAttention(nn.Module):
-    def __init__(self, dim=512, kernel_size=3, res=False):
+class LCTAttention(nn.Module):
+    def __init__(self, dim=512, kernel_size=3, res=True):
         super().__init__()
         self.res = res
         self.dim = dim
@@ -142,8 +201,8 @@ class ECAAttention(nn.Module):
         return x*y.expand_as(x)
 #--------------------------------------------------------------attention conv--------------------------------------------------------#
 
-class LCT_DR_UNet_new(nn.Module):
-#
+class LCT_new_DR_UNet_new(nn.Module):
+#net total parameters: 23522336
     def __init__(self, training):
         super().__init__()
 
@@ -204,11 +263,11 @@ class LCT_DR_UNet_new(nn.Module):
         # 32*32 尺度下的映射
         self.map1 = MaxPooling(ch_in=256, ch_out=1, kernel_size=1, stride=1, scale_factor=4)
 #----------------------------------------------------attention----------------------------------------------------------------------#
-        self.cot0 = CoTAttention(dim=16, kernel_size=3)
-        self.cot1 = CoTAttention(dim=32, kernel_size=3)
-        self.cot2 = CoTAttention(dim=64, kernel_size=3)
-        self.cot3 = CoTAttention(dim=128, kernel_size=3)
-        self.cot4 = CoTAttention(dim=256, kernel_size=3)
+        self.LCT0 = LCTAttention(dim=16, kernel_size=3)
+        self.LCT1 = LCTAttention(dim=32, kernel_size=3)
+        self.LCT2 = LCTAttention(dim=64, kernel_size=3)
+        self.LCT3 = LCTAttention(dim=128, kernel_size=3)
+        self.LCT4 = LCTAttention(dim=256, kernel_size=3)
 
         self.eca = ECAAttention(kernel_size=3)
 # ----------------------------------------------------attention----------------------------------------------------------------------#
@@ -238,7 +297,7 @@ class LCT_DR_UNet_new(nn.Module):
 
         short_range6 = self.up_conv2(outputs)  # ([3, 128, 4, 64, 64])
         # long_range3 = self.eca(long_range3)
-        cot_long_range3 = self.cot2(long_range3)
+        LCT_long_range3 = self.LCT2(long_range3)
         outputs = self.decoder_stage2(torch.cat([short_range6, cot_long_range3,long_range3], dim=1))  # ([3, 128, 4, 64, 64])
         outputs = F.dropout(outputs, 0.3, self.training)  # ([3, 128, 4, 64, 64])
 
@@ -246,14 +305,14 @@ class LCT_DR_UNet_new(nn.Module):
 
         short_range7 = self.up_conv3(outputs)  # ([3, 64, 8, 128, 128])
         # long_range2 = self.eca(long_range2)
-        cot_long_range2 = self.cot1(long_range2)
+        LCT_long_range2 = self.LCT1(long_range2)
         outputs = self.decoder_stage3(torch.cat([short_range7, cot_long_range2,long_range2], dim=1))  # ([3, 64, 8, 128, 128])
         outputs = F.dropout(outputs, 0.3, self.training)  # ([3, 64, 8, 128, 128])
 
         output3 = self.map3(outputs)
 
         short_range8 = self.up_conv4(outputs)  # ([3, 32, 16, 256, 256])
-        cot_long_range1 = self.cot0(long_range1)
+        LCT_long_range1 = self.LCT0(long_range1)
         #long_range1 = self.eca(long_range1)
         outputs = self.decoder_stage4(torch.cat([short_range8, cot_long_range1,long_range1], dim=1))  # ([3, 32, 16, 256, 256])
 
@@ -274,23 +333,5 @@ def inita(module):
         nn.init.constant_(module.bias.data, 0)
 
 
-net = LCT_DR_UNet_new(training=True)
+net = LCT_new_DR_UNet_new(training=True)
 net.apply(inita)
-
-# 计算网络参数
-print('net total parameters:', sum(param.numel() for param in net.parameters()))
-# from torchsummary import summary
-
-def main():
-    # device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    net = LCT_DR_UNet_new(training=False).cuda()
-    x = torch.randn(1, 1, 16, 256, 256).cuda()
-    # x = torch.randn(3,1,16,512,512).cuda()
-    output = net(x)
-    print(output.shape)  # torch.Size([2, 1, 8, 512, 512])
-    # summary(net,(1,8,256,256))
-
-# if __name__ == '__main__':
-#     main()
-if __name__ == '__main__':
-    main()
