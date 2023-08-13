@@ -1,8 +1,3 @@
-"""
-
-三维全连接条件随机场后处理优化
-"""
-
 import os
 import sys
 
@@ -18,7 +13,6 @@ import pydensecrf.densecrf as dcrf
 from pydensecrf.utils import create_pairwise_bilateral, create_pairwise_gaussian, unary_from_softmax
 from utils.metrics import Metirc
 import parameter_crf as para
-# 在python3.5环境下运行
 file_name = []  # 文件名称
 
 # 定义评价指标
