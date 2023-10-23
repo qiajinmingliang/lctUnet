@@ -33,6 +33,7 @@ I have graduated and am no longer engaged in related work. Unfortunately, I did 
 Training 3DUNet:
 Firstly, adjust some parameters in parameter.py. It's crucial to set --dataset_path to ./fixed. All parameters are commented within the parameter.py file.
 Subsequently, run python train.py --save model_name.
+
 Testing 3DUNet:
 Firstly, adjust some parameters in parameter_test.py. It's crucial to set --dataset_path to ./fixed.
 Subsequently, run python test.py --save model_name.
