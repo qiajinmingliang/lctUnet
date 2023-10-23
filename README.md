@@ -27,7 +27,7 @@ After making these changes, you can run python preprocess.py. If executed correc
 I recommend running the model within the PyTorch framework, specifically using the PyTorch 10.2 version.
 
 3. Detailed Model Implementation:
-I regret to inform you that I have graduated and am no longer engaged in related work. Unfortunately, I did not retain the code on my personal computer. However, I suggest attempting to reproduce the model based on the descriptions provided in the paper.
+I have graduated and am no longer engaged in related work. Unfortunately, I did not retain the code on my personal computer. However, I suggest attempting to reproduce the model based on the descriptions provided in the paper.
 
 4. Training and Testing the Model:
 Training 3DUNet:
