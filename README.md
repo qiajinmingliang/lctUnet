@@ -1,1 +1,1 @@
-For code issues, please contact: qianjinww@foxmail.com
+For code issues, Welcome to issues!
